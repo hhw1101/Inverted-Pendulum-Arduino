@@ -4,150 +4,271 @@
 #include <RotaryEncoder.h>
 #include <PinChangeInterrupt.h>
 
-// ======= Pin Definitions =======
-#define LMOTOR_DIR 4
-#define LMOTOR_PWM 5
-#define RMOTOR_PWM 6
-#define RMOTOR_DIR 7
+// ========== Pin Definitions ==========
+// Motor Control Pins
+#define LMOTOR_DIRECTION_PIN 4
+#define LMOTOR_SPEED_PIN 5
+#define RMOTOR_SPEED_PIN 6
+#define RMOTOR_DIRECTION_PIN 7
 
-#define MOTOR_ENC_A 8
-#define MOTOR_ENC_B 9
-#define PEND_ENC_A 2
-#define PEND_ENC_B 3
+// Motor(position) encoder
+#define MOTOR_ENCODER_PIN_A 8
+#define MOTOR_ENCODER_PIN_B 9
 
-// ======= Constants =======
-#define MOTOR_CPR 116.4f
-#define PEND_CPR 2000.0f
-#define WHEEL_DIAMETER 0.08f
+// External(angle) encoders - Pendulum
+#define PENDULUM_ENCODER_PIN_A 2
+#define PENDULUM_ENCODER_PIN_B 3
 
-const float rad_per_pend_tick = (2.0f * PI) / PEND_CPR;
+// ========== Constants ==========
+#define MOTOR_ENCODER_CPR 116.4
+#define PENDULUM_ENCODER_CPR 2000
+#define WHEEL_DIAMETER 0.08 // meters
 
-// ======= Filter Parameters =======
-float filtered_angle = 0.0f;
-float filtered_ang_vel = 0.0f;
-const float alpha_angle = 0.2f;
-const float alpha_velocity = 0.1f;
+// Calculate how many radians per tick for the pendulum
+const float rad_per_pendulum_tick = (2.0f * PI) / PENDULUM_ENCODER_CPR;
+const float target_distance = 1.85;  // 6ft in meters
+// ========== Forward Declarations ==========
+// A simple placeholder controller function
+float controller(const float *state, const float *setpoint, const float target_distance);
 
-// ======= Cart Class =======
-struct Cart {
-  RotaryEncoder encoder;
+float filtered_pendulum_angle = 0.0f;
+float filtered_pendulum_velocity = 0.0f;
+float angle_filter_alpha = 0.2f;
+float velocity_filter_alpha = 0.1f;
 
-  Cart(int a, int b) : encoder(a, b) {}
+// ========== Cart Struct ==========
+struct Cart
+{
+  // Motor encoder to track cart position
+  RotaryEncoder motor_encoder;
 
-  void set_speed(int speed) {
-    if (speed > 0) {
-      digitalWrite(LMOTOR_DIR, LOW);
-      digitalWrite(RMOTOR_DIR, HIGH);
-    } else {
-      digitalWrite(LMOTOR_DIR, HIGH);
-      digitalWrite(RMOTOR_DIR, LOW);
+  // Constructor
+  Cart(int encA, int encB) : motor_encoder(encA, encB) {}
+
+  // Set speed for both motors (±255)
+  void set_speed(int speed)
+  {
+    /*
+      speed: int from -255 to +255
+      Positive => forward movement
+      Negative => reverse movement
+    */
+
+    if (speed > 0)
+    {
+      // Forward direction
+      digitalWrite(LMOTOR_DIRECTION_PIN, LOW);
+      digitalWrite(RMOTOR_DIRECTION_PIN, HIGH);
+      speed = min(speed, 255);
     }
-    analogWrite(LMOTOR_PWM, abs(speed));
-    analogWrite(RMOTOR_PWM, abs(speed));
+    else
+    {
+      // Reverse direction
+      digitalWrite(LMOTOR_DIRECTION_PIN, HIGH);
+      digitalWrite(RMOTOR_DIRECTION_PIN, LOW);
+      speed = max(speed, -255);
+    }
+
+    // The absolute value is used for PWM
+    analogWrite(LMOTOR_SPEED_PIN, abs(speed));
+    analogWrite(RMOTOR_SPEED_PIN, abs(speed));
   }
 
-  float get_position() {
-    float ticks = encoder.getPosition();
-    return (PI * WHEEL_DIAMETER) * (ticks / MOTOR_CPR);
+  // Return cart position in meters based on the motor encoder
+  float get_position()
+  {
+    float enc_val = motor_encoder.getPosition();
+    // Convert encoder ticks to distance:
+    return (WHEEL_DIAMETER * PI) * (enc_val / MOTOR_ENCODER_CPR);
   }
 
-  float get_velocity() {
+  // Return cart velocity in m/s based on the motor encoder
+  float get_velocity()
+  {
     static int sign = 1;
-    int dir = encoder.getDirection();
-    if (dir != 0 && dir != sign) sign = -sign;
-
-    unsigned long lastTick = encoder.getLastTickTime();
-    if (millis() - lastTick < 100) {
-      unsigned long mbr = max((unsigned long)1, encoder.getMicrosBetweenRotations());
-      float omega = (2.0f * PI * 1000000.0f) / (MOTOR_CPR * mbr);
-      omega = min(omega, 20.0f * PI);
-      return omega * (WHEEL_DIAMETER / 2.0f) * sign;
+    int direction = (int)motor_encoder.getDirection();
+    if (direction != 0 && direction != sign)
+    {
+      sign = -sign;
     }
-    return 0.0f;
+
+    float angular_velocity = 0.0f;
+    unsigned long lastTickTime = motor_encoder.getLastTickTime();
+
+    // If we had a tick in the last 100 ms, compute speed from microsBetweenRotations
+    if (millis() - lastTickTime < 100)
+    {
+      unsigned long mbr = max((unsigned long)1, motor_encoder.getMicrosBetweenRotations());
+      float raw_av = (2.0f * PI * 1000000.0f) / (MOTOR_ENCODER_CPR * (float)mbr);
+      // clamp to some max to avoid noise
+      if (raw_av > 20.0f * PI)
+      {
+        raw_av = 20.0f * PI;
+      }
+      angular_velocity = sign * raw_av;
+    }
+    // Convert rad/s to linear speed: v = ω * r
+    return angular_velocity * (WHEEL_DIAMETER * 0.5f);
   }
 
-  int torque_to_pwm(float torque) {
-    const float tau_stall = 13.0f;
-    const float I_stall = 2.0f;
-    const float V_nom = 6.0f;
-    float Kt = tau_stall / I_stall;
-    float I_req = torque / Kt;
-    float V_req = (I_req / I_stall) * V_nom;
-    int pwm = (int)(255.0f * (V_req / V_nom));
-    return constrain(pwm, -255, 255);
+  // Convert a desired torque (N·m) to ±255 PWM
+  int torque_to_PWM(float desiredTorque)
+  {
+    // Example constants - adjust based on your motor specs
+    const float tau_stall = 13.0f; // in kg·mm
+    const float I_stall = 2.0f;    // in A
+    const float V_nominal = 6.0f;  // in V
+
+    // Torque constant Kt = stall_torque / stall_current
+    float K_t = tau_stall / I_stall;
+
+    // Required current
+    float I_required = desiredTorque / K_t;
+
+    // Required voltage
+    float V_required = (I_required / I_stall) * V_nominal;
+
+    // Convert voltage to PWM (range ±255)
+    int pwm_value = (int)(255.0f * (V_required / V_nominal));
+
+    // Clamp PWM value to valid range
+    if (pwm_value > 255)
+      pwm_value = 255;
+    if (pwm_value < -255)
+      pwm_value = -255;
+    return pwm_value;
   }
 };
 
-// ======= Pendulum Functions =======
-float get_pendulum_angle(RotaryEncoder &encoder, float offset) {
-  float raw = (encoder.getPosition() * rad_per_pend_tick) - offset;
-  filtered_angle = alpha_angle * raw + (1.0f - alpha_angle) * filtered_angle;
-  return filtered_angle;
+float get_pendulum_angle(RotaryEncoder &pendulum_encoder, float init_angle)
+{
+  // Calculate raw angle
+  float raw_angle = (pendulum_encoder.getPosition() * rad_per_pendulum_tick) - init_angle;
+
+  // Apply low pass filter
+  filtered_pendulum_angle = angle_filter_alpha * raw_angle + (1.0f - angle_filter_alpha) * filtered_pendulum_angle;
+
+  return filtered_pendulum_angle;
 }
 
-float get_pendulum_velocity(RotaryEncoder &encoder) {
+float get_pendulum_angular_velocity(RotaryEncoder &pendulum_encoder)
+{
   static int sign = 1;
-  // int dir = encoder.getDirection();
-  if (dir != 0 && dir != sign) sign = -sign;
-
-  float vel = 0.0f;
-  if (millis() - encoder.getLastTickTime() < 50) {
-    unsigned long mbr = max((unsigned long)1, encoder.getMicrosBetweenRotations());
-    vel = (2.0f * PI * 1000000.0f) / (PEND_CPR * mbr);
-    vel = min(vel, 4.0f * PI);
-    vel *= sign;
+  // getDirection() returns CW=1 or CCW=-1 (depending on library)
+  int direction = (int)pendulum_encoder.getDirection();
+  if (direction != 0 && direction != sign)
+  {
+    sign = -sign;
   }
-  filtered_ang_vel = alpha_velocity * vel + (1.0f - alpha_velocity) * filtered_ang_vel;
-  return filtered_ang_vel;
+
+  float raw_velocity = 0.0f;
+
+  // If no tick for too long, velocity = 0
+  if (millis() - pendulum_encoder.getLastTickTime() < 50)
+  {
+    // max(1, microsBetweenRotations()) to avoid divide-by-zero
+    unsigned long mbr = max((unsigned long)1, pendulum_encoder.getMicrosBetweenRotations());
+    raw_velocity = (2.0f * PI * 1000000.0f) / (PENDULUM_ENCODER_CPR * mbr);
+    // clamp to some max velocity to avoid weird spikes
+    if (raw_velocity > 4.0f * PI)
+    {
+      raw_velocity = 4.0f * PI;
+    }
+    raw_velocity *= sign;
+  }
+
+  // Apply low pass filter
+  filtered_pendulum_velocity = velocity_filter_alpha * raw_velocity +
+                               (1.0f - velocity_filter_alpha) * filtered_pendulum_velocity;
+
+  return filtered_pendulum_velocity;
 }
 
-// ======= Global Objects & State =======
-Cart cart(MOTOR_ENC_A, MOTOR_ENC_B);
-RotaryEncoder pendulum(PEND_ENC_A, PEND_ENC_B);
-float init_angle = 0.0f;
-float state[4] = {0};
-float setpoint[4] = {0};
+// ========== Global Objects ==========
+// Cart with motor encoder on pins 8 and 9
+Cart cart(MOTOR_ENCODER_PIN_A, MOTOR_ENCODER_PIN_B);
 
-void setup() {
+// Pendulum encoder on pins 2 and 3
+RotaryEncoder pendulum_encoder(PENDULUM_ENCODER_PIN_A, PENDULUM_ENCODER_PIN_B);
+
+// initial pendulum angle offset
+float init_pendulum_angle = 0.0f;
+
+// We'll store [x, x_dot, theta, theta_dot]
+float state[4] = {0, 0, 0, 0};
+float setpoint[4] = {0, 0, 0, 0};
+
+// ========== Setup ==========
+void setup()
+{
   PCICR |= B00000100;
   PCMSK2 |= B00111111;
-  pinMode(LMOTOR_DIR, OUTPUT);
-  pinMode(RMOTOR_DIR, OUTPUT);
-  pinMode(LMOTOR_PWM, OUTPUT);
-  pinMode(RMOTOR_PWM, OUTPUT);
+
+  // Motor direction pins
+  pinMode(LMOTOR_DIRECTION_PIN, OUTPUT);
+  pinMode(RMOTOR_DIRECTION_PIN, OUTPUT);
+  // Motor speed (PWM) pins
+  pinMode(LMOTOR_SPEED_PIN, OUTPUT);
+  pinMode(RMOTOR_SPEED_PIN, OUTPUT);
+
   Serial.begin(115200);
-  delay(500);
-  Serial.println("System starting...");
+  while (!Serial)
+  {
+    delay(10);
+  }
+
+  float angle_total = 0;
+  Serial.print("Initial pendulum angle: ");
+  Serial.println(init_pendulum_angle, 6);
 }
 
-void loop() {
-  // Check if cart has traveled less than 2 meters
-  if (cart.get_position() >= 2.0f) {
-    cart.set_speed(0);
-    Serial.println("Limit reached: 2 meters");
-    return;
-  }
+// ========== Main Loop ==========
+void loop()
+{
+  // ---------- 1) Update state ----------
+  // 1) cart position
   state[0] = cart.get_position();
+  // 2) cart velocity
   state[1] = cart.get_velocity();
-  state[2] = get_pendulum_angle(pendulum, init_angle);
-  state[3] = get_pendulum_velocity(pendulum);
+  // 3) pendulum angle
+  state[2] = get_pendulum_angle(pendulum_encoder, init_pendulum_angle);
+  // 4) pendulum angular velocity
+  state[3] = get_pendulum_angular_velocity(pendulum_encoder);
 
-  float u = controller(state, setpoint);
-  int pwm = cart.torque_to_pwm(u);
-  if (abs(pwm) < 50) pwm = 0;
-  cart.set_speed(pwm);
+  // ---------- 2) Calculate control signal ----------
+  // Example: call your controller to get the commanded torque
+  float desiredTorque = controller(state, setpoint, target_distance);
 
-  static int printCount = 0;
-  if (++printCount % 20 == 0) {
-    Serial.print(state[2]); Serial.print(",");
-    Serial.print(state[0]); Serial.print(",");
-    Serial.println(pwm);
+  // ---------- 3) Apply control to motors ----------
+  // Convert torque -> PWM -> set motor speeds
+  int pwm_val = cart.torque_to_PWM(desiredTorque);
+  if (pwm_val < 50 && pwm_val > -50)
+  {
+    pwm_val = 0;
   }
+  cart.set_speed(pwm_val);
 
+  // ---------- 4) Debug Output ----------
+  static int printCounter = 0;
+  if (printCounter++ % 20 == 0)
+  {
+    // Print every 20 loops to make the Serial more readable
+    Serial.print(state[2]); // angle theta
+    Serial.print(",");
+    Serial.print(state[0]); // linear displacement x
+    Serial.print(",");
+    Serial.println(pwm_val); // PWM value
+  }
+  // Short delay for stable execution
   delay(10);
 }
 
-ISR(PCINT2_vect) {
-  cart.encoder.tick();
-  pendulum.tick();
+// ========== Interrupt Service Routines ==========
+ISR(PCINT2_vect)
+{
+  // Motor encoder tick
+  cart.motor_encoder.tick();
+
+  // Pendulum encoder tick
+  pendulum_encoder.tick();
 }

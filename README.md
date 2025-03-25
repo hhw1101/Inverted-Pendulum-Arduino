@@ -1,139 +1,55 @@
-# Arduino Apps
+# Inverted Pendulum Arduino
 
-​
+This repository contains two Arduino-based control programs used in the inverted pendulum system for COMP0216 :
 
-**Arduino Apps for Windows and Android**
-
-​
-
-
-
-​
-
-We know that [ArduinoApps](https://www.sabelectronic.com/2022/04/arduino-apps.html)[ ](https://www.sabelectronic.com/2020/08/aruino-apps.html) Used for Programming. But we could run it on Windows Or Android. As it depends on the availability of a programming device for our projects.
-
-​
-
-
-
-
-
-These Apps can help to learn and create electronic projects. I will describe the functions and introductory of the following application and also support systems
-
-​
-
-required to run.
-
-​
-
-**Arduino apps for Windows**
+- `Stabilisation_Code/`: Code responsible for stabilizing the pendulum using different control strategies.
+- `Travel_Code/`: Code designed for evaluating system performance during linear motion (forward travel).
 
 ---
 
-**Arduino IDE**
+##  1. Stabilisation Code
 
-Arduino IDE is open-source software for [Arduino programming](https://www.sabelectronic.com/2020/05/getting-started-with-arduino-uno.html). It is very easy to install. The software has a beta version and hourly based, any of them can program Arduino.
+The `Stabilising_Code` folder contains the balancing code. This code stabilises the system from disturbances and takes the pendulum to start in the upright poisitono. 
+- The files are split into tow and `stabilising_code.ino` handles sensor readings, actuation, and control flow.
+- The actual control logic (PID, LQR, Pole Placement) is done via `controller.ino`.
 
-​
 
-It widely used for Arduino Projects. Here the downloads for only windows, but for mac OS and Linux.
+### Dependencies
 
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDM=)
+- `RotaryEncoder` library.
+- **Important:** This project uses a *modified version* of the `RotaryEncoder` library for improved angle measurements.
 
-​
-> **Arduino Apps**
-
-​
+To use this code:
+1. Unzip the contents of the `RotaryEncoder/` folder into your local Arduino `libraries` directory.
 
 ---
 
-​
+##  2. Travel Code
 
-**mblock**
+In the `Travel_code` folder, this sketch was used in the second evaluation phase to control the cart's forward motion while keeping the pendulum balanced.
 
-​
+The travel code builds on the stabilisation system, with additional logic for driving the cart forward a fixed distance while maintaining upright stability. The main change is implememnting a PID control on the position of the cart. The controller function additionally takes another variable of the `target_distance`. 
 
-If you don't enjoy programming with difficult languages, the mblock is the best option for programming. It is also an open-source tool. It is a scratch-based coding platform software designed for Science, Technology, Engineering, Arts, and Mathematics \(STEAM\) education.
+---
 
-​
+##  Hardware
 
-We use it for Arduino Mega2560 and a micro bit. The latest version is mblock 5 for windows 7/8/10. It is a drag & drop type block-based Developer tool. It is available at the App Store for iPhone and iPad. This is also an
+This code is intended to be used with a 4 wheeled cart controlled by and Arduino Uno R3 and 2 dfmotors L298P motor shields. 
 
+The configuration of the system can be seen in the image below:
 
+![Arduino and motor shield stack](Images/stack_systems.jpg){: style="width:300px" padding-left="100px"}
+![Pinout](Images/pins_systems.jpg){: style="width:300px"}
 
-Arduino app for android and gets from Google play store. Mblock is mostly used for
+The cart has 4 motors, each has their own encoder, however only 1 motor encoder needs to be connected to the arduino on pins 8 and 9. To power the encoder on the motor we connected the motor encoder to the 5v pin and ground on the boards. Then the optical encoder is attached to the pivot point needs to be connected to the pins 2 and 3 as these are the interupt pins. Which is powered by the 3.3V pin and is grounded by the arduino board. 
 
-​
+---
 
-robotics projects.
-​
+## 📌 Notes
 
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDQ=)
-
-​
-
-**Ardublockly**
-​
-
-Ardublockly is used to program Arduino, a useful visual programming editor. Which Easily generates. Arduino code JavaScript used for creating block-based visual programming languages \(VPLs\) and editors.
-
-​
-​
-
-Ardublockly runs on Windows, Linux, and Mac. Ardublockly is free and open-source Arduino app. It is block-based programming, Just select blocks and makes a program.
-
-​
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDU=)
-
-​
-**Arduino UNO Simulator**
-
-
-The Arduino UNO simulator is a Windows and Android-based Software \(at play store with many available\) that provide a virtual representation of a real-world Arduino circuit. It is a virtual version of exactly the same circuit.
-
-​
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDk=)
+- Ensure your hardware setup (motor driver, sensors, encoder) matches the image in the ahrdware section.
+- The controller selection in `controller.ino` can be switched by toggling flags at the beginning of the file.
+- This codebase is modular to support rapid tuning and debugging.
 
 
 
-**PartSim**
-
-​
-
-Partsim is a freeware software, and it is easy to apply a circuit simulator. parts run in your Internet Browser. You can use it online. This circuit simulator also used to calculate current in each loop.
-
-​
-
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDg=)
-
-​
-
-> **Arduino Apps for Android**
-
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDY=)
-
-​
-
-Android Apps for Electronics solutions. It is an easy-to-use Arduino Application in Apple Android.Arduino Droid app for Mobiles Droid v 4.9.1.
-
-​
-
-The app works on PC and an example for Arduino also available. It includes IDE, compiler, and up-loader. the mobile memory should be enough and it can't be set up on an SD card for Android protection policy.
-
-​
-
-In the second picture shows a menu, it looks easy to program Arduino. all options Will display By clicking the upright button. Arduino Libraries can add as in Arduino Ide.
-
-​
-**Blynk Apps for IoT**
-
-​
-
-Blynk is one of the best Arduino Apps of Blynk Inc for android to use with ESP8266, ESP32, NodeMCU, and also works with Raspberry Pi. Blynk also supports Bluetooth Low energy \(BLE\). this is an Arduino Bluetooth controller app for wireless devices.
-​
-
-It contains a lot of examples and a set of libraries to build an internet of things \(IoT\) easily, even if you have little experience in electronics. With the Blynk just connect Sensors and you can control output modules e.g. Motors, actuators, or robotics vehicles. It is available from Blynk official site.
-
-
-
-![image](https://wikifactory.com/files/RmlsZTo0NTQzNDc=)
