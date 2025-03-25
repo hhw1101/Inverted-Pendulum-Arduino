@@ -1,55 +1,126 @@
 # Inverted Pendulum Arduino
 
-This repository contains two Arduino-based control programs used in the inverted pendulum system for COMP0216 :
+This repository contains two Arduino-based control programs used in the inverted pendulum system for **COMP0216**. The project demonstrates **real-time control** of a cart-pendulum system using multiple strategies.
 
-- `Stabilisation_Code/`: Code responsible for stabilizing the pendulum using different control strategies.
-- `Travel_Code/`: Code designed for evaluating system performance during linear motion (forward travel).
+## Overview
+
+This system is split into two main folders:
+
+1. **Stabilisation Code** – Balances the pendulum in place using PID, LQR, or Pole Placement.
+2. **Travel Code** – Drives the cart forward a fixed distance while maintaining balance.
+
+The setup uses a rotary encoder from one of the motors and optical encoder for sensor feedback, and is powered via an Arduino Uno R3 and dual L298P motor shields.
 
 ---
 
-##  1. Stabilisation Code
+## 📁 Repository Structure
+```
+├── Stabilisation_Code/   
+| ├── stabilising_code.ino 
+│ └── controller.ino 
+├── Travel_Code/ 
+│ └── travel.ino 
+├── RotaryEncoder.zip/ 
+└── Images/
+  ├── stack_systems.jpg 
+  └── pins_systems.jpg
+```
+---
 
-The `Stabilising_Code` folder contains the balancing code. This code stabilises the system from disturbances and takes the pendulum to start in the upright poisitono. 
-- The files are split into tow and `stabilising_code.ino` handles sensor readings, actuation, and control flow.
-- The actual control logic (PID, LQR, Pole Placement) is done via `controller.ino`.
+##  Features
 
+-  **Real-time Inverted Pendulum Balancing**
+-  **Multiple Control Strategies**:
+  - PID Control
+  - Pole Placement
+  - LQR (Linear Quadratic Regulator)
+-  **Forward Travel Support** with target distance control
+-  **Sensor Integration** via motor encoder and optical encoder
+-  **Tunable Parameters** in controller files
 
-### Dependencies
+---
 
-- `RotaryEncoder` library.
-- **Important:** This project uses a *modified version* of the `RotaryEncoder` library for improved angle measurements.
+##  Installation & Setup
 
-To use this code:
-1. Unzip the contents of the `RotaryEncoder/` folder into your local Arduino `libraries` directory.
+### Prerequisites
+
+Install the following Arduino libraries:
+
+-  **RotaryEncoder** (Modified) – included in this repository  
+-> Unzip the contents of `RotaryEncoder.zip/` into your local Arduino `libraries/` folder.
+
+-  **PinChangeInterrupt** – install via the Arduino Library Manager  
+   -> Go to **Sketch > Include Library > Manage Libraries**, search for `"PinChangeInterrupt"`, and install it.
+
+---
+
+## 1. Stabilisation Code
+
+Located in the `Stabilising_Code/` folder.
+
+- `Stabilising_Code.ino` – Main loop, handles real-time control and sensor reading.
+- `controller.ino` – Defines controller logic for:
+  - PID (PD)
+  - Pole Placement
+  - LQR
+
+The pendulum starts in the upright position and stabilized using the selected control method after a small disturbance is applied. 
+
+### How to Run
+1. Open `stabilising_code.ino` in Arduino IDE.
+2. Choose the controller in `controller.ino` by toggling the variables at the top.
+3. Upload the code to the Arduino Uno.
 
 ---
 
 ##  2. Travel Code
 
-In the `Travel_code` folder, this sketch was used in the second evaluation phase to control the cart's forward motion while keeping the pendulum balanced.
+Located in the `Travel_code/` folder.
 
-The travel code builds on the stabilisation system, with additional logic for driving the cart forward a fixed distance while maintaining upright stability. The main change is implememnting a PID control on the position of the cart. The controller function additionally takes another variable of the `target_distance`. 
+- `Travel_code.ino` is designed for **forward motion** while keeping the pendulum balanced.
 
----
-
-##  Hardware
-
-This code is intended to be used with a 4 wheeled cart controlled by and Arduino Uno R3 and 2 dfmotors L298P motor shields. 
-
-The configuration of the system can be seen in the image below:
-
-![Arduino and motor shield stack](Images/stack_systems.jpg){: style="width:300px" padding-left="100px"}
-![Pinout](Images/pins_systems.jpg){: style="width:300px"}
-
-The cart has 4 motors, each has their own encoder, however only 1 motor encoder needs to be connected to the arduino on pins 8 and 9. To power the encoder on the motor we connected the motor encoder to the 5v pin and ground on the boards. Then the optical encoder is attached to the pivot point needs to be connected to the pins 2 and 3 as these are the interupt pins. Which is powered by the 3.3V pin and is grounded by the arduino board. 
+Main features:
+- Builds on the stabilisation system.
+- Adds control over **target cart distance** using an additional PID loop.
+- Ideal for measuring system behaviour during extended translation.
 
 ---
 
-## 📌 Notes
+##  Hardware Configuration
 
-- Ensure your hardware setup (motor driver, sensors, encoder) matches the image in the ahrdware section.
-- The controller selection in `controller.ino` can be switched by toggling flags at the beginning of the file.
-- This codebase is modular to support rapid tuning and debugging.
+This code is intended for use with:
 
+-  **4-wheeled cart**
+-  **Arduino Uno R3**
+-  **2x DFRobot L298P Motor Shields**
+-  **Motor encoder + optical encoder**
 
+###  System Images
+
+<div align="center">
+  <img src="Images/stack_systems.jpg" width="300px" alt="Arduino Stack">
+  <img src="Images/pins_systems.jpg" width="300px" alt="Pinout Diagram">
+</div>
+
+###  Pin Connections
+
+| Component             | Arduino Pins      |
+| --------------------- | ----------------- |
+| Motor encoder (1x)    | 8, 9              |
+| Motor encoder power   | 5V and GND        |
+| Optical encoder       | 2, 3 (Interrupts) |
+| Optical encoder power | 3.3V and GND      |
+
+- Only **one motor encoder** is required.
+  - Multiple can be used but is redundant
+- The **optical encoder** attached to the pivot of the pendulum to get the best readings. 
+- Make sure to connect encoders correctly using 5V (motor encoder) and 3.3V (optical encoder).
+
+---
+
+##  Notes
+
+- Ensure your hardware setup matches the wiring and pin diagrams shown above.
+- The controller selection logic is modular and easily switchable in `controller.ino`.
+- You can tune gains and modify the control strategy depending on your evaluation phase.
 
