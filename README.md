@@ -13,7 +13,7 @@ The setup uses a rotary encoder from one of the motors and optical encoder for s
 
 ---
 
-## 📁 Repository Structure
+##  Repository Structure
 ```
 ├── Stabilisation_Code/   
 | ├── stabilising_code.ino 
